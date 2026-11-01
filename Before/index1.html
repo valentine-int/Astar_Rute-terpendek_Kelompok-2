@@ -1,0 +1,359 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Graf Pencarian Halte</title>
+
+    <!-- Leaflet CSS -->
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        h2 {
+            padding: 12px 20px;
+            margin: 0;
+        }
+
+        #map {
+            height: 80vh;
+            width: 100%;
+        }
+
+        .legend {
+            padding: 12px 20px;
+            background: white;
+            line-height: 1.8;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 7px;
+        }
+
+        .junction {
+            background: #2563eb;
+        }
+
+        .stop {
+            background: #dc2626;
+        }
+
+        .network {
+            display: inline-block;
+            width: 20px;
+            border-top: 3px solid #2563eb;
+            margin-right: 7px;
+        }
+
+        .connector {
+            display: inline-block;
+            width: 20px;
+            border-top: 3px dashed #dc2626;
+            margin-right: 7px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Visualisasi Jaringan Graf Pencarian Halte</h2>
+
+    <div id="map"></div>
+
+    <div class="legend">
+        <div><span class="dot junction"></span>Persimpangan simulasi (J1–J10)</div>
+        <div><span class="dot stop"></span>Titik halte OSM (H1–H18)</div>
+        <div><span class="network"></span>Edge antar-persimpangan</div>
+        <div><span class="connector"></span>Edge penghubung halte</div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // ===================================
+        // 1. MEMBUAT PETA
+        // ===================================
+
+        const map = L.map("map").setView(
+            [-6.311, 106.794],
+            16
+        );
+
+        L.tileLayer(
+            "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+            {
+                attribution:
+                    '&copy; OpenStreetMap contributors &copy; CARTO'
+            }
+        ).addTo(map);
+
+
+        // ===================================
+        // 2. DATA PERSIMPANGAN SIMULASI
+        // ===================================
+
+        const junctions = {
+            J1: [-6.3090, 106.7910],
+            J2: [-6.3090, 106.7945],
+            J3: [-6.3092, 106.7975],
+            J4: [-6.3108, 106.7905],
+            J5: [-6.3107, 106.7940],
+            J6: [-6.3107, 106.7975],
+            J7: [-6.3120, 106.7925],
+            J8: [-6.3122, 106.7895],
+            J9: [-6.3127, 106.7955],
+            J10: [-6.3132, 106.7988]
+        };
+
+
+        // ===================================
+        // 3. DATA 18 TITIK HALTE DARI OSM
+        // ===================================
+
+        const stops = {
+            H1: {
+                name: "Pasar Pondok Labu",
+                coord: [-6.3120408, 106.7940991]
+            },
+            H2: {
+                name: "SMPN 85",
+                coord: [-6.3123693, 106.7952284]
+            },
+            H3: {
+                name: "Simpang Pinang 1 Pondok Labu",
+                coord: [-6.3091279, 106.7957296]
+            },
+            H4: {
+                name: "Graha Werdatama Pondok Labu",
+                coord: [-6.3091324, 106.7947118]
+            },
+            H5: {
+                name: "Taman DDN",
+                coord: [-6.3125617, 106.7963705]
+            },
+            H6: {
+                name: "Jalan Pinang Raya",
+                coord: [-6.3089474, 106.7937556]
+            },
+            H7: {
+                name: "Jalan Haji Ipin",
+                coord: [-6.3110602, 106.793585]
+            },
+            H8: {
+                name: "Jalan Haji Muslim",
+                coord: [-6.3090054, 106.7936729]
+            },
+            H9: {
+                name: "Jalan Pinang II Pondok Labu",
+                coord: [-6.3104352, 106.7966723]
+            },
+            H10: {
+                name: "Sbr. Akper Fatmawati Pondok Labu",
+                coord: [-6.3131017, 106.79938]
+            },
+            H11: {
+                name: "Simpang DDN Pondok Labu",
+                coord: [-6.31264, 106.79687]
+            },
+            H12: {
+                name: "Sekolah Darussalam H. Ipin",
+                coord: [-6.311351, 106.79271]
+            },
+            H13: {
+                name: "Al Izhar Pondok Labu 2",
+                coord: [-6.311504, 106.79104]
+            },
+            H14: {
+                name: "Sbr. Sekolah Keperawatan YPDR",
+                coord: [-6.311342, 106.78859]
+            },
+            H15: {
+                name: "Sekolah Keperawatan YPDR",
+                coord: [-6.311307, 106.78843]
+            },
+            H16: {
+                name: "Al Izhar Pondok Labu 1",
+                coord: [-6.3115787, 106.7909388]
+            },
+            H17: {
+                name: "Masjid At Taqwa H. Ipin",
+                coord: [-6.3114796, 106.7927906]
+            },
+            H18: {
+                name: "Akper Fatmawati Pondok Labu",
+                coord: [-6.313187, 106.79931]
+            }
+        };
+
+
+        // ===================================
+        // 4. EDGE ANTAR-PERSIMPANGAN
+        // ===================================
+
+        // Format: [titik awal, titik tujuan, jarak]
+
+        const roadEdges = [
+            ["J1", "J2", 464],
+            ["J2", "J3", 399],
+            ["J1", "J4", 249],
+            ["J2", "J5", 236],
+            ["J3", "J6", 200],
+            ["J4", "J5", 464],
+            ["J5", "J6", 464],
+            ["J4", "J7", 310],
+            ["J4", "J8", 229],
+            ["J5", "J7", 264],
+            ["J6", "J9", 376],
+            ["J7", "J8", 399],
+            ["J7", "J9", 409],
+            ["J9", "J10", 443]
+        ];
+
+
+        // ===================================
+        // 5. EDGE PENGHUBUNG HALTE
+        // ===================================
+
+        // Format: [kode halte, kode persimpangan, jarak]
+
+        const stopEdges = [
+            ["H1", "J5", 179],
+            ["H2", "J9", 57],
+            ["H3", "J2", 164],
+            ["H4", "J2", 33],
+            ["H5", "J9", 117],
+            ["H6", "J2", 99],
+            ["H7", "J5", 73],
+            ["H8", "J2", 110],
+            ["H9", "J6", 115],
+            ["H10", "J10", 78],
+            ["H11", "J9", 182],
+            ["H12", "J7", 91],
+            ["H13", "J4", 118],
+            ["H14", "J8", 166],
+            ["H15", "J8", 185],
+            ["H16", "J4", 119],
+            ["H17", "J7", 79],
+            ["H18", "J10", 68]
+        ];
+
+
+        // ===================================
+        // 6. MENAMPILKAN TITIK PERSIMPANGAN
+        // ===================================
+
+        for (const id in junctions) {
+
+            const coord = junctions[id];
+
+            L.circleMarker(coord, {
+                radius: 7,
+                color: "#1d4ed8",
+                fillColor: "#2563eb",
+                fillOpacity: 1
+            })
+            .addTo(map)
+            .bindPopup(
+                `<b>${id}</b><br>Persimpangan simulasi`
+            );
+        }
+
+
+        // ===================================
+        // 7. MENAMPILKAN TITIK HALTE
+        // ===================================
+
+        for (const id in stops) {
+
+            const stop = stops[id];
+
+            L.circleMarker(stop.coord, {
+                radius: 6,
+                color: "#b91c1c",
+                fillColor: "#dc2626",
+                fillOpacity: 1
+            })
+            .addTo(map)
+            .bindPopup(
+                `<b>${id}</b><br>${stop.name}<br>Data halte OSM`
+            );
+        }
+
+
+        // ===================================
+        // 8. MENGGAMBAR EDGE PERSIMPANGAN
+        // ===================================
+
+        roadEdges.forEach(edge => {
+
+            const [from, to, distance] = edge;
+
+            L.polyline(
+                [junctions[from], junctions[to]],
+                {
+                    color: "#2563eb",
+                    weight: 4,
+                    opacity: 0.8
+                }
+            )
+            .addTo(map)
+            .bindPopup(
+                `${from} - ${to}<br>Jarak simulasi: ${distance} m`
+            );
+        });
+
+
+        // ===================================
+        // 9. MENGGAMBAR EDGE PENGHUBUNG HALTE
+        // ===================================
+
+        stopEdges.forEach(edge => {
+
+            const [stopId, junctionId, distance] = edge;
+
+            L.polyline(
+                [stops[stopId].coord, junctions[junctionId]],
+                {
+                    color: "#dc2626",
+                    weight: 2,
+                    dashArray: "6, 6",
+                    opacity: 0.8
+                }
+            )
+            .addTo(map)
+            .bindPopup(
+                `${stopId} - ${junctionId}<br>Jarak simulasi: ${distance} m`
+            );
+        });
+
+
+        // ===================================
+        // 10. MENYESUAIKAN TAMPILAN PETA
+        // ===================================
+
+        const allCoordinates = [
+            ...Object.values(junctions),
+            ...Object.values(stops).map(stop => stop.coord)
+        ];
+
+        map.fitBounds(allCoordinates, {
+            padding: [30, 30]
+        });
+
+    </script>
+
+</body>
+</html>

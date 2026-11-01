@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A* Rute Pejalan Kaki ke Halte - UPNVJ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;display:flex;height:100vh;color:#1f2933}
+#side{width:410px;overflow:auto;padding:12px;border-right:1px solid #ddd;background:#faf9f6}#map{flex:1}
+h1{font-size:16px;margin:0 0 6px}h3{font-size:14px;margin:14px 0 6px}.note{color:#6b7280;font-size:12px}
+label{display:block;margin:3px 0}button{font:inherit;padding:7px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+button.p{background:#b91c1c;color:#fff;border-color:#b91c1c}
+.card{border:1px solid #d9d4cb;border-radius:8px;padding:8px 10px;margin:6px 0;background:#fff;cursor:pointer}
+.card.on{border-color:#16a34a;box-shadow:0 0 0 2px #16a34a33}.bad{color:#b91c1c;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid #e5e5e5;padding:3px 4px;text-align:left}
+.bar{height:9px;border-radius:3px;margin:2px 0}.saran{background:#fff7e6;border:1px solid #f0d9a8;padding:8px;border-radius:6px;margin-top:8px}
+.lg span{display:inline-block;width:18px;height:0;border-top:4px solid;vertical-align:middle;margin:0 4px 0 8px}
+@media(max-width:800px){body{flex-direction:column-reverse}#side{width:100%;height:55vh}#map{height:45vh;flex:none}}
+</style></head><body>
+<div id="side">
+<h1>A* Rute Pejalan Kaki ke Halte</h1>
+<div class="note">1) Klik peta untuk titik awal. 2) Pilih skenario &amp; algoritma. 3) Cari Rute. Graf = simulasi (10 persimpangan buatan + 18 halte OSM).</div>
+<h3>Skenario kondisi jalan</h3>
+<label><input type="radio" name="sk" value="1" checked> Normal</label>
+<label><input type="radio" name="sk" value="2"> Padat</label>
+<label><input type="radio" name="sk" value="3"> Hambatan berat</label>
+<label><input type="radio" name="sk" value="4"> Penutupan jalur (konstruksi)</label>
+<h3>Algoritma</h3>
+<label><input type="radio" name="al" value="0"> A* Baseline (jarak)</label>
+<label><input type="radio" name="al" value="1" checked> A* Modifikasi (waktu + kondisi jalan)</label>
+<p><button class="p" id="cari">Cari Rute</button> <button id="band">Bandingkan semua</button></p>
+<div class="lg note"><span style="border-color:#9ca3af"></span>normal<span style="border-color:#f59e0b"></span>padat<span style="border-color:#b45309"></span>hambatan berat<span style="border-color:#dc2626;border-top-style:dashed"></span>tutup</div>
+<div id="warn" class="bad"></div><div id="hasil"></div><div id="detail"></div><div id="band-out"></div>
+</div><div id="map"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/*INTI - harus identik dengan astar_halte_v3.cpp*/
+const VN=1.2, VMAKS=1.2, FAK=1.2, RB=6371000;
+const hav=(a,b,c,d)=>{const r=x=>x*Math.PI/180,q=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return RB*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));};
+const JN=[[-6.3090,106.7910],[-6.3090,106.7945],[-6.3092,106.7975],[-6.3108,106.7905],[-6.3107,106.7940],[-6.3107,106.7975],[-6.3120,106.7925],[-6.3122,106.7895],[-6.3127,106.7955],[-6.3132,106.7988]];
+const HL=[["Pasar Pondok Labu",-6.3120408,106.7940991],["SMPN 85",-6.3123693,106.7952284],["Simpang Pinang 1 Pondok Labu",-6.3091279,106.7957296],["Graha Werdatama Pondok Labu",-6.3091324,106.7947118],["Taman DDN",-6.3125617,106.7963705],["Jalan Pinang Raya",-6.3089474,106.7937556],["Jalan Haji Ipin",-6.3110602,106.793585],["Jalan Haji Muslim",-6.3090054,106.7936729],["Jalan Pinang II Pondok Labu",-6.3104352,106.7966723],["Sbr. Akper Fatmawati Pondok Labu",-6.3131017,106.79938],["Simpang DDN Pondok Labu",-6.31264,106.79687],["Sekolah Darussalam H. Ipin",-6.311351,106.79271],["Al Izhar Pondok Labu 2",-6.311504,106.79104],["Sbr. Sekolah Keperawatan YPDR",-6.311342,106.78859],["Sekolah Keperawatan YPDR",-6.311307,106.78843],["Al Izhar Pondok Labu 1",-6.3115787,106.7909388],["Masjid At Taqwa H. Ipin",-6.3114796,106.7927906],["Akper Fatmawati Pondok Labu",-6.313187,106.79931]];
+const ED=[["J1","J2",464],["J2","J3",399],["J1","J4",249],["J2","J5",236],["J3","J6",200],["J4","J5",464],["J5","J6",464],["J4","J7",310],["J4","J8",229],["J5","J7",264],["J6","J9",376],["J7","J8",399],["J7","J9",409],["J9","J10",443],["H1","J5",179],["H2","J9",57],["H3","J2",164],["H4","J2",33],["H5","J9",117],["H6","J2",99],["H7","J5",73],["H8","J2",110],["H9","J6",115],["H10","J10",78],["H11","J9",182],["H12","J7",91],["H13","J4",118],["H14","J8",166],["H15","J8",185],["H16","J4",119],["H17","J7",79],["H18","J10",68]];
+const LAMBAT=[["J2","J5"],["J5","J6"],["J7","J9"],["J4","J7"],["H1","J5"],["H7","J5"],["H12","J7"],["H17","J7"],["H13","J4"],["H2","J9"]];
+const TUTUP=[["J1","J4"],["J3","J6"],["J4","J5"]];
+function bangun(lat,lon,s){
+  const N=[],E=[],adj=[],ix={};
+  const addN=(id,nama,la,lo,h)=>{ix[id]=N.length;N.push({id,nama,lat:la,lon:lo,halte:h});adj.push([]);};
+  const addE=(a,b,d)=>{const e={a:ix[a],b:ix[b],d,v:VN,p:0,tutup:false};adj[e.a].push(E.length);adj[e.b].push(E.length);E.push(e);};
+  JN.forEach((x,i)=>addN("J"+(i+1),"Persimpangan J"+(i+1),x[0],x[1],false));
+  HL.forEach((x,i)=>addN("H"+(i+1),x[0],x[1],x[2],true));
+  ED.forEach(x=>addE(x[0],x[1],x[2]));
+  let bi=0,bd=Infinity;
+  for(let i=0;i<10;i++){const d=hav(lat,lon,N[i].lat,N[i].lon);if(d<bd){bd=d;bi=i;}}
+  addN("S","Titik awal",lat,lon,false);addE("S",N[bi].id,bd*FAK);
+  const g={N,E,adj,ix,start:ix["S"],jarakAwal:bd};terapkan(g,s);return g;
+}
+function terapkan(g,s){ // reset dulu, lalu ubah atribut ruas (1 objek ruas = kedua arah)
+  g.E.forEach(e=>{e.v=VN;e.p=0;e.tutup=false;});
+  const set=(a,b,v,p,t)=>{const x=g.ix[a],y=g.ix[b];g.E.forEach(e=>{if((e.a==x&&e.b==y)||(e.a==y&&e.b==x)){e.v=v;e.p=p;e.tutup=t;}});};
+  if(s==2||s==3)LAMBAT.forEach(u=>set(u[0],u[1],s==2?0.8:0.6,s==3?45:0,false));
+  if(s==4)TUTUP.forEach(u=>set(u[0],u[1],0,0,true));
+}
+// mode 0 = baseline (g=jarak, h=haversine, abaikan kondisi); mode 1 = modifikasi (g=d/v+p, lewati ruas tutup, h=haversine/VMAKS)
+function astar(g,mode,s,t){
+  const n=g.N.length,G=Array(n).fill(Infinity),pe=Array(n).fill(-1),cl=Array(n).fill(false),q=[];let exp=0;
+  const h=u=>{const d=hav(g.N[u].lat,g.N[u].lon,g.N[t].lat,g.N[t].lon);return mode?d/VMAKS:d;};
+  const less=(a,b)=>a[0]<b[0]||(a[0]==b[0]&&a[1]<b[1]);
+  const push=x=>{q.push(x);let i=q.length-1;while(i>0){const p=(i-1)>>1;if(!less(q[i],q[p]))break;[q[i],q[p]]=[q[p],q[i]];i=p;}};
+  const pop=()=>{const top=q[0],last=q.pop();if(q.length){q[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<q.length&&less(q[l],q[m]))m=l;if(r<q.length&&less(q[r],q[m]))m=r;if(m==i)break;[q[i],q[m]]=[q[m],q[i]];i=m;}}return top;};
+  G[s]=0;push([h(s),s]);
+  while(q.length){
+    const u=pop()[1];if(cl[u])continue;cl[u]=true;exp++;if(u==t)break;
+    for(const id of g.adj[u]){const e=g.E[id];if(mode&&e.tutup)continue;const w=e.a==u?e.b:e.a;if(cl[w])continue;
+      const c=mode?e.d/e.v+e.p:e.d;if(G[u]+c<G[w]){G[w]=G[u]+c;pe[w]=id;push([G[w]+h(w),w]);}}
+  }
+  if(G[t]===Infinity)return{ok:false,exp};
+  const path=[],edges=[];for(let u=t;u!=s;){const id=pe[u];edges.push(id);path.push(u);u=g.E[id].a==u?g.E[id].b:g.E[id].a;}
+  path.push(s);path.reverse();edges.reverse();return{ok:true,g:G[t],exp,path,edges};
+}
+function cari(g,mode){ // A* ke 18 halte, urut menurut g algoritmanya; rute dinilai pada kondisi skenario aktif
+  const v=[];let tot=0;
+  g.N.forEach((n,i)=>{if(!n.halte)return;const h=astar(g,mode,g.start,i);tot+=h.exp;if(!h.ok)return;
+    const it={t:i,id:n.id,nama:n.nama,g:h.g,path:h.path,edges:h.edges,jarak:0,waktu:0,blok:false};
+    h.edges.forEach(id=>{const e=g.E[id];it.jarak+=e.d;if(e.tutup)it.blok=true;else it.waktu+=e.d/e.v+e.p;});v.push(it);});
+  v.sort((a,b)=>a.g!==b.g?a.g-b.g:a.t-b.t);return{top:v,tot};
+}
+/*UI*/
+const $=id=>document.getElementById(id),val=n=>+document.querySelector('input[name='+n+']:checked').value;
+const f1=x=>x.toFixed(1),NAMA=["","Normal","Padat","Hambatan berat","Penutupan jalur"];
+const map=L.map('map').setView([-6.3110,106.7940],16);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+let start={lat:-6.3150,lon:106.7930},cur=null;
+const sm=L.circleMarker([start.lat,start.lon],{radius:9,color:'#fff',weight:2,fillColor:'#e11d48',fillOpacity:1}).addTo(map).bindTooltip('Titik awal');
+const gNet=L.layerGroup().addTo(map),gRoute=L.layerGroup().addTo(map);
+function gambarJaringan(){
+  gNet.clearLayers();const g=bangun(start.lat,start.lon,val('sk'));
+  $('warn').textContent=g.jarakAwal>1000?'Titik awal '+Math.round(g.jarakAwal)+' m dari persimpangan terdekat: di luar area simulasi.':'';
+  g.E.forEach(e=>{const a=g.N[e.a],b=g.N[e.b];let c='#9ca3af',d=null,w=3;
+    if(e.tutup){c='#dc2626';d='6 6';w=4;}else if(e.p>0){c='#b45309';w=4;}else if(e.v<VN){c='#f59e0b';w=4;}
+    L.polyline([[a.lat,a.lon],[b.lat,b.lon]],{color:c,weight:w,dashArray:d,opacity:.85}).addTo(gNet);});
+  g.N.forEach(n=>{if(n.id=="S")return;L.circleMarker([n.lat,n.lon],n.halte?{radius:6,color:'#1d4ed8',fillColor:'#2563eb',fillOpacity:1,weight:1}:{radius:3,color:'#374151',fillOpacity:1}).addTo(gNet).bindTooltip(n.halte?n.nama:n.id);});
+}
+function garis(g,it,warna,dash){const pts=it.path.map(i=>[g.N[i].lat,g.N[i].lon]);L.polyline(pts,{color:it.blok?'#dc2626':warna,weight:6,dashArray:dash,opacity:.9}).addTo(gRoute);}
+function ket(it){return it.blok?'<span class="bad">TERHALANG (lewat ruas tutup)</span>':f1(it.waktu)+' dtk ('+f1(it.waktu/60)+' mnt)';}
+function tampil(){
+  const s=val('sk'),mode=val('al');gambarJaringan();gRoute.clearLayers();
+  const g=bangun(start.lat,start.lon,s),r=cari(g,mode);cur={g,r,mode};
+  let h='<h3>'+(mode?'A* Modifikasi':'A* Baseline')+' - '+NAMA[s]+'</h3>';
+  r.top.slice(0,3).forEach((it,k)=>h+='<div class="card" data-k="'+k+'"><b>#'+(k+1)+' '+it.nama+'</b><br>Jarak '+f1(it.jarak)+' m &middot; '+ket(it)+'</div>');
+  h+='<div class="note">Node dikembangkan (18 pencarian): '+r.tot+(mode?'':' &middot; baseline mengurutkan menurut jarak, waktu dinilai pada kondisi skenario')+'</div>';
+  $('hasil').innerHTML=h;$('band-out').innerHTML='';
+  document.querySelectorAll('.card').forEach(c=>c.onclick=()=>pilih(+c.dataset.k));pilih(0);
+}
+function pilih(k){
+  const{g,r,mode}=cur,it=r.top[k];gRoute.clearLayers();garis(g,it,mode?'#16a34a':'#2563eb',mode?null:'8 8');
+  map.fitBounds(L.polyline(it.path.map(i=>[g.N[i].lat,g.N[i].lon])).getBounds(),{padding:[60,60]});
+  document.querySelectorAll('.card').forEach(c=>c.classList.toggle('on',+c.dataset.k==k));
+  let t='<h3>Detail rute #'+(k+1)+'</h3><table><tr><th>Dari</th><th>Ke</th><th>Jarak</th><th>v (m/s)</th><th>Penalti</th><th>Waktu</th><th>Status</th></tr>';
+  it.edges.forEach((id,i)=>{const e=g.E[id],a=g.N[it.path[i]],b=g.N[it.path[i+1]];
+    t+='<tr><td>'+a.id+'</td><td>'+b.id+'</td><td>'+Math.round(e.d)+'</td><td>'+(e.tutup?'-':e.v)+'</td><td>'+e.p+'</td><td>'+(e.tutup?'-':f1(e.d/e.v+e.p))+'</td><td>'+(e.tutup?'<span class="bad">tutup</span>':e.p>0?'hambatan':e.v<VN?'padat':'normal')+'</td></tr>';});
+  $('detail').innerHTML=t+'</table>';
+}
+function ukur(g,mode){const t0=performance.now();for(let i=0;i<200;i++)cari(g,mode);return(performance.now()-t0)/200;}
+function saran(b,m){
+  if(b.blok)return'Baseline memilih <b>'+b.nama+'</b> tetapi rutenya melewati ruas yang ditutup sehingga tidak bisa dilalui. Modifikasi memilih <b>'+m.nama+'</b> ('+f1(m.waktu)+' dtk) lewat jalur yang terbuka.';
+  if(b.t==m.t&&b.path.join()==m.path.join())return'Kedua algoritma memilih halte dan rute yang sama: kondisi jalan tidak menyentuh rute terdekat dari titik ini.';
+  const d=b.waktu-m.waktu;return'Modifikasi memilih <b>'+m.nama+'</b>, lebih cepat '+f1(d)+' dtk ('+f1(100*d/b.waktu)+'%) daripada rute baseline ke '+b.nama+' pada kondisi ini.';
+}
+function bandingkan(){
+  gambarJaringan();gRoute.clearLayers();const sNow=val('sk');let rows='',mx=1;const D=[];
+  for(let s=1;s<=4;s++){const g=bangun(start.lat,start.lon,s),rb=cari(g,0),rm=cari(g,1);D.push({s,g,rb,rm,tb:ukur(g,0),tm:ukur(g,1)});
+    const b=rb.top[0],m=rm.top[0];mx=Math.max(mx,b.blok?0:b.waktu,m.waktu);}
+  D.forEach(d=>{const b=d.rb.top[0],m=d.rm.top[0];
+    rows+='<tr><td>'+NAMA[d.s]+'</td><td>'+b.nama+'<div class="bar" style="width:'+(b.blok?100:100*b.waktu/mx)+'%;background:'+(b.blok?'#dc2626':'#2563eb')+'"></div>'+ket(b)+'</td><td>'+m.nama+'<div class="bar" style="width:'+100*m.waktu/mx+'%;background:#16a34a"></div>'+f1(m.waktu)+' dtk</td><td>'+d.rb.tot+' / '+d.rm.tot+'<br>'+d.tb.toFixed(3)+' / '+d.tm.toFixed(3)+' ms</td></tr>';});
+  const c=D[sNow-1];garis(c.g,c.rb.top[0],'#2563eb','8 8');garis(c.g,c.rm.top[0],'#16a34a',null);
+  $('hasil').innerHTML='';$('detail').innerHTML='';
+  $('band-out').innerHTML='<h3>Perbandingan (halte #1 tiap algoritma, waktu nyata)</h3><table><tr><th>Skenario</th><th>Baseline (biru)</th><th>Modifikasi (hijau)</th><th>Node / ms (B / M)</th></tr>'+rows+'</table><div class="saran"><b>'+NAMA[sNow]+':</b> '+saran(c.rb.top[0],c.rm.top[0])+'</div><div class="note">Peta menampilkan rute skenario terpilih: baseline putus-putus biru, modifikasi hijau.</div>';
+}
+map.on('click',e=>{start={lat:e.latlng.lat,lon:e.latlng.lng};sm.setLatLng(e.latlng);gRoute.clearLayers();gambarJaringan();$('hasil').innerHTML='<div class="note">Titik awal diubah. Tekan Cari Rute.</div>';$('detail').innerHTML='';$('band-out').innerHTML='';});
+document.querySelectorAll('input[name=sk]').forEach(r=>r.onchange=()=>{gRoute.clearLayers();gambarJaringan();});
+$('cari').onclick=tampil;$('band').onclick=bandingkan;gambarJaringan();
+</script></body></html>
